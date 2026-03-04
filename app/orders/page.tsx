@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { subscribeToAllOrders, updateOrderStatus, Order, OrderStatus } from "@/lib/orders";
 import { FaCheckCircle, FaTimesCircle, FaClock, FaUtensils, FaPhone, FaUser, FaMapMarkerAlt, FaBell, FaBellSlash } from "react-icons/fa";
+import AdminNavbar from "@/components/AdminNavbar";
 
 type FilterTab = "all" | "placed" | "accepted" | "out_for_delivery" | "rejected" | "delivered";
 
@@ -366,8 +367,10 @@ export default function AdminOrdersPage() {
                 </div>
             </header>
 
+            <AdminNavbar />
+
             {/* Filter Tabs */}
-            <div className="bg-white border-b border-gray-200 sticky top-[64px] z-30">
+            <div className="bg-white border-b border-gray-200 sticky top-[76px] z-30">
                 <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-3 flex gap-2 overflow-x-auto no-scrollbar">
                     {tabs.map((tab) => (
                         <button
