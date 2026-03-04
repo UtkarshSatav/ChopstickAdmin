@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { subscribeToAllOrders, updateOrderStatus, Order, OrderStatus } from "@/lib/orders";
 import { FaCheckCircle, FaTimesCircle, FaClock, FaUtensils, FaPhone, FaUser, FaMapMarkerAlt, FaBell, FaBellSlash } from "react-icons/fa";
 
-type FilterTab = "all" | "placed" | "accepted" | "rejected";
+type FilterTab = "all" | "placed" | "accepted" | "out_for_delivery" | "rejected" | "delivered";
 
 // ─── Loud Bell Sound via Web Audio API ───
 function createBellSound(audioCtx: AudioContext) {
@@ -44,7 +44,19 @@ function StatusBadge({ status }: { status: string }) {
         case "accepted":
             return (
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-green-100 text-green-700 text-xs font-bold">
-                    <FaCheckCircle /> Accepted
+                    <FaCheckCircle /> Preparing
+                </span>
+            );
+        case "out_for_delivery":
+            return (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold">
+                    <FaCheckCircle /> Out for Delivery
+                </span>
+            );
+        case "delivered":
+            return (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-bold">
+                    <FaCheckCircle /> Delivered
                 </span>
             );
         case "rejected":
@@ -138,8 +150,18 @@ function AdminOrderCard({ order, onUpdateStatus, isRinging }: { order: Order; on
             {/* Total + Actions */}
             <div className="px-5 py-4 border-t border-gray-100 flex items-center justify-between">
                 <div>
-                    <p className="text-xs text-gray-400">Total</p>
+                    <div className="flex items-center gap-2 mb-1">
+                        <p className="text-xs text-gray-400">Total</p>
+                        {order.address.distance && (
+                            <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                <FaMapMarkerAlt size={8} /> {order.address.distance} km
+                            </span>
+                        )}
+                    </div>
                     <p className="text-xl font-bold text-accent">₹{order.total}</p>
+                    {order.deliveryCharge > 0 && (
+                        <p className="text-[10px] text-gray-400 mt-0.5">(Inc. ₹{order.deliveryCharge} delivery)</p>
+                    )}
                 </div>
 
                 {order.status === "placed" && (
@@ -157,6 +179,28 @@ function AdminOrderCard({ order, onUpdateStatus, isRinging }: { order: Order; on
                             className="px-5 py-2.5 bg-red-600 text-white rounded-xl font-bold text-sm hover:bg-red-700 transition-colors disabled:opacity-50 cursor-pointer flex items-center gap-1.5 shadow-sm"
                         >
                             <FaTimesCircle /> Reject
+                        </button>
+                    </div>
+                )}
+                {order.status === "accepted" && (
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => handleStatusUpdate("out_for_delivery")}
+                            disabled={updating}
+                            className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-colors disabled:opacity-50 cursor-pointer flex items-center gap-1.5 shadow-sm"
+                        >
+                            <FaCheckCircle /> Out for Delivery
+                        </button>
+                    </div>
+                )}
+                {order.status === "out_for_delivery" && (
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => handleStatusUpdate("delivered")}
+                            disabled={updating}
+                            className="px-5 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 transition-colors disabled:opacity-50 cursor-pointer flex items-center gap-1.5 shadow-sm"
+                        >
+                            <FaCheckCircle /> Mark Delivered
                         </button>
                     </div>
                 )}
@@ -276,13 +320,16 @@ export default function AdminOrdersPage() {
         all: orders.length,
         placed: orders.filter((o) => o.status === "placed").length,
         accepted: orders.filter((o) => o.status === "accepted").length,
+        out_for_delivery: orders.filter((o) => o.status === "out_for_delivery").length,
         rejected: orders.filter((o) => o.status === "rejected").length,
+        delivered: orders.filter((o) => o.status === "delivered").length,
     };
 
     const tabs: { key: FilterTab; label: string; color: string }[] = [
         { key: "all", label: "All", color: "bg-gray-100 text-gray-700" },
-        { key: "placed", label: "Pending", color: "bg-yellow-100 text-yellow-700" },
-        { key: "accepted", label: "Accepted", color: "bg-green-100 text-green-700" },
+        { key: "accepted", label: "Preparing", color: "bg-green-100 text-green-700" },
+        { key: "out_for_delivery", label: "Out for Delivery", color: "bg-indigo-100 text-indigo-700" },
+        { key: "delivered", label: "Delivered", color: "bg-blue-100 text-blue-700" },
         { key: "rejected", label: "Rejected", color: "bg-red-100 text-red-700" },
     ];
 
