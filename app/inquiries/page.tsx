@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { subscribeToAllInquiries, InquiryData } from "@/lib/inquiries";
 import { FaEnvelope, FaUser, FaPhone, FaAt } from "react-icons/fa";
 import AdminNavbar from "@/components/AdminNavbar";
+import StoreStatusToggle from "@/components/StoreStatusToggle";
 
 export default function InquiriesPage() {
     const [inquiries, setInquiries] = useState<InquiryData[]>([]);
@@ -29,8 +30,11 @@ export default function InquiriesPage() {
                             <p className="text-xs text-gray-400">Inquiry Management</p>
                         </div>
                     </div>
-                    <div className="text-right">
-                        <p className="text-sm font-medium text-gray-900">{inquiries.length} total</p>
+                    <div className="flex items-center gap-4">
+                        <StoreStatusToggle />
+                        <div className="text-right">
+                            <p className="text-sm font-medium text-gray-900">{inquiries.length} total</p>
+                        </div>
                     </div>
                 </div>
             </header>

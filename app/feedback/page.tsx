@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { subscribeToAllFeedback, FeedbackData } from "@/lib/feedback";
 import { FaStar, FaCommentDots } from "react-icons/fa";
 import AdminNavbar from "@/components/AdminNavbar";
+import StoreStatusToggle from "@/components/StoreStatusToggle";
 
 export default function FeedbackPage() {
     const [feedbacks, setFeedbacks] = useState<FeedbackData[]>([]);
@@ -28,8 +29,11 @@ export default function FeedbackPage() {
                             <p className="text-xs text-gray-500">Feedback Management</p>
                         </div>
                     </div>
-                    <div className="text-right">
-                        <p className="text-sm font-medium text-gray-900">{feedbacks.length} total</p>
+                    <div className="flex items-center gap-4">
+                        <StoreStatusToggle />
+                        <div className="text-right">
+                            <p className="text-sm font-medium text-gray-900">{feedbacks.length} total</p>
+                        </div>
                     </div>
                 </div>
             </header>

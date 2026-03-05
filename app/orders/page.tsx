@@ -4,8 +4,9 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { subscribeToAllOrders, updateOrderStatus, Order, OrderStatus } from "@/lib/orders";
 import { FaCheckCircle, FaTimesCircle, FaClock, FaUtensils, FaPhone, FaUser, FaMapMarkerAlt, FaBell, FaBellSlash } from "react-icons/fa";
 import AdminNavbar from "@/components/AdminNavbar";
+import StoreStatusToggle from "@/components/StoreStatusToggle";
 
-type FilterTab = "all" | "placed" | "accepted" | "out_for_delivery" | "rejected" | "delivered";
+type FilterTab = "placed" | "accepted" | "out_for_delivery" | "rejected" | "delivered";
 
 // ─── Loud Bell Sound via Web Audio API ───
 function createBellSound(audioCtx: AudioContext) {
@@ -213,20 +214,21 @@ function AdminOrderCard({ order, onUpdateStatus, isRinging }: { order: Order; on
 export default function AdminOrdersPage() {
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<FilterTab>("all");
-    const [ringingOrderIds, setRingingOrderIds] = useState<Set<string>>(new Set());
+    const [activeTab, setActiveTab] = useState<FilterTab>("placed");
     const [soundEnabled, setSoundEnabled] = useState(true);
+    const [audioCtxState, setAudioCtxState] = useState<string>("suspended");
 
-    const knownOrderIdsRef = useRef<Set<string>>(new Set());
     const audioCtxRef = useRef<AudioContext | null>(null);
-    const bellIntervalsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
-    const bellTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
-    const isFirstLoadRef = useRef(true);
+    const bellIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-    // Initialize AudioContext on first user interaction
     const ensureAudioCtx = useCallback(() => {
         if (!audioCtxRef.current) {
-            audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const AudioCtx = (window.AudioContext || (window as any).webkitAudioContext);
+            audioCtxRef.current = new AudioCtx();
+            setAudioCtxState(audioCtxRef.current.state);
+            audioCtxRef.current.onstatechange = () => {
+                setAudioCtxState(audioCtxRef.current?.state || "suspended");
+            };
         }
         if (audioCtxRef.current.state === "suspended") {
             audioCtxRef.current.resume();
@@ -234,88 +236,65 @@ export default function AdminOrdersPage() {
         return audioCtxRef.current;
     }, []);
 
-    // Start ringing for an order
-    const startRinging = useCallback((orderId: string) => {
-        if (!soundEnabled) return;
-
-        const ctx = ensureAudioCtx();
-
-        // Play bell immediately
-        createBellSound(ctx);
-
-        // Repeat every 2 seconds
-        const interval = setInterval(() => {
-            createBellSound(ctx);
-        }, 1500);
-        bellIntervalsRef.current.set(orderId, interval);
-
-        // Auto-stop after 15 seconds
-        const timeout = setTimeout(() => {
-            stopRinging(orderId);
-        }, 15000);
-        bellTimeoutsRef.current.set(orderId, timeout);
-
-        setRingingOrderIds((prev) => new Set(prev).add(orderId));
-    }, [soundEnabled, ensureAudioCtx]);
-
-    // Stop ringing for an order
-    const stopRinging = useCallback((orderId: string) => {
-        const interval = bellIntervalsRef.current.get(orderId);
-        if (interval) {
-            clearInterval(interval);
-            bellIntervalsRef.current.delete(orderId);
-        }
-        const timeout = bellTimeoutsRef.current.get(orderId);
-        if (timeout) {
-            clearTimeout(timeout);
-            bellTimeoutsRef.current.delete(orderId);
-        }
-        setRingingOrderIds((prev) => {
-            const next = new Set(prev);
-            next.delete(orderId);
-            return next;
-        });
+    // Unlock audio on interaction
+    useEffect(() => {
+        const unlock = () => {
+            if (audioCtxRef.current?.state === "suspended") {
+                audioCtxRef.current.resume();
+            }
+        };
+        window.addEventListener("click", unlock);
+        window.addEventListener("touchstart", unlock);
+        return () => {
+            window.removeEventListener("click", unlock);
+            window.removeEventListener("touchstart", unlock);
+        };
     }, []);
 
     useEffect(() => {
         const unsub = subscribeToAllOrders((allOrders) => {
-            // Detect new orders with status "placed"
-            if (!isFirstLoadRef.current) {
-                allOrders.forEach((order) => {
-                    if (order.id && order.status === "placed" && !knownOrderIdsRef.current.has(order.id)) {
-                        startRinging(order.id);
-                    }
-                    // Stop ringing if order was accepted/rejected
-                    if (order.id && order.status !== "placed" && ringingOrderIds.has(order.id)) {
-                        stopRinging(order.id);
-                    }
-                });
-            }
-
-            // Update known order IDs
-            knownOrderIdsRef.current = new Set(allOrders.map((o) => o.id!));
-            isFirstLoadRef.current = false;
-
             setOrders(allOrders);
             setLoading(false);
         });
+        return () => unsub();
+    }, []);
+
+    useEffect(() => {
+        const hasPlaced = orders.some((o) => o.status === "placed");
+
+        if (hasPlaced && soundEnabled) {
+            // Already running? Don't restart, just keep going
+            if (bellIntervalRef.current) return;
+
+            const ctx = ensureAudioCtx();
+            const playSound = () => {
+                if (ctx.state === "running") {
+                    createBellSound(ctx);
+                }
+            };
+
+            playSound();
+            bellIntervalRef.current = setInterval(playSound, 1500);
+        } else {
+            if (bellIntervalRef.current) {
+                clearInterval(bellIntervalRef.current);
+                bellIntervalRef.current = null;
+            }
+        }
 
         return () => {
-            unsub();
-            // Clean up all intervals/timeouts
-            bellIntervalsRef.current.forEach((interval) => clearInterval(interval));
-            bellTimeoutsRef.current.forEach((timeout) => clearTimeout(timeout));
+            if (bellIntervalRef.current) {
+                clearInterval(bellIntervalRef.current);
+                bellIntervalRef.current = null;
+            }
         };
-    }, [startRinging, stopRinging]);
+    }, [orders, soundEnabled, ensureAudioCtx]);
 
     const handleUpdateStatus = async (orderId: string, status: OrderStatus) => {
-        stopRinging(orderId);
         await updateOrderStatus(orderId, status);
     };
 
-    const filteredOrders = activeTab === "all"
-        ? orders
-        : orders.filter((o) => o.status === activeTab);
+    const filteredOrders = orders.filter((o) => o.status === activeTab);
 
     const counts = {
         all: orders.length,
@@ -327,10 +306,9 @@ export default function AdminOrdersPage() {
     };
 
     const tabs: { key: FilterTab; label: string; color: string }[] = [
-        { key: "all", label: "All", color: "bg-gray-100 text-gray-700" },
+        { key: "placed", label: "Pending", color: "bg-yellow-100 text-yellow-700" },
         { key: "accepted", label: "Preparing", color: "bg-green-100 text-green-700" },
         { key: "out_for_delivery", label: "Out for Delivery", color: "bg-indigo-100 text-indigo-700" },
-        { key: "delivered", label: "Delivered", color: "bg-blue-100 text-blue-700" },
         { key: "rejected", label: "Rejected", color: "bg-red-100 text-red-700" },
     ];
 
@@ -369,6 +347,21 @@ export default function AdminOrdersPage() {
 
             <AdminNavbar />
 
+            {/* Sound Blocked Warning */}
+            {soundEnabled && orders.some((o) => o.status === "placed") && audioCtxState !== "running" && (
+                <div className="bg-yellow-100 border-b border-yellow-200 px-4 py-3 flex items-center justify-center gap-3">
+                    <div className="bg-yellow-500 p-2 rounded-full animate-bounce">
+                        <FaBell className="text-white text-sm" />
+                    </div>
+                    <div>
+                        <p className="text-yellow-800 text-sm font-bold">New orders pending!</p>
+                        <p className="text-yellow-700 text-xs">
+                            Please <button onClick={() => ensureAudioCtx().resume()} className="underline font-black hover:text-yellow-900">click here to enable the alarm sound</button>.
+                        </p>
+                    </div>
+                </div>
+            )}
+
             {/* Filter Tabs */}
             <div className="bg-white border-b border-gray-200 sticky top-[76px] z-30">
                 <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-3 flex gap-2 overflow-x-auto no-scrollbar">
@@ -397,7 +390,7 @@ export default function AdminOrdersPage() {
                     ) : filteredOrders.length === 0 ? (
                         <div className="text-center py-20">
                             <FaUtensils className="text-4xl text-gray-300 mx-auto mb-4" />
-                            <p className="text-gray-400 text-lg">No {activeTab === "all" ? "" : activeTab} orders</p>
+                            <p className="text-gray-400 text-lg">No {activeTab} orders</p>
                         </div>
                     ) : (
                         filteredOrders.map((order) => (
@@ -405,7 +398,7 @@ export default function AdminOrdersPage() {
                                 key={order.id}
                                 order={order}
                                 onUpdateStatus={handleUpdateStatus}
-                                isRinging={ringingOrderIds.has(order.id!)}
+                                isRinging={order.status === "placed"}
                             />
                         ))
                     )}

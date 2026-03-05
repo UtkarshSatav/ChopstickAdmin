@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { FaUtensils, FaStar, FaEnvelope } from "react-icons/fa";
+import StoreStatusToggle from "./StoreStatusToggle";
 
 export default function AdminNavbar() {
     const pathname = usePathname();
@@ -16,7 +17,7 @@ export default function AdminNavbar() {
 
     return (
         <div className="bg-white border-b border-gray-200">
-            <div className="container mx-auto px-4 sm:px-6 lg:px-8 flex">
+            <div className="container mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
                 <nav className="flex gap-6 overflow-x-auto no-scrollbar">
                     {links.map((link) => {
                         const isActive = pathname === link.href;
@@ -34,6 +35,10 @@ export default function AdminNavbar() {
                         );
                     })}
                 </nav>
+
+                <div className="flex-shrink-0 ml-4 py-2">
+                    <StoreStatusToggle />
+                </div>
             </div>
         </div>
     );

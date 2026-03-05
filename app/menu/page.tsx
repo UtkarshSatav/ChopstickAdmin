@@ -1,9 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { subscribeToMenu, saveMenu } from "@/lib/menu";
-import { FaPlus, FaTrash, FaSave, FaEdit, FaUtensils, FaArrowUp, FaArrowDown } from "react-icons/fa";
+import { FaPlus, FaTrash, FaSave, FaEdit, FaUtensils, FaArrowUp, FaArrowDown, FaCloudUploadAlt, FaImage } from "react-icons/fa";
 import AdminNavbar from "@/components/AdminNavbar";
+import StoreStatusToggle from "@/components/StoreStatusToggle";
+import { storage } from "@/lib/firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 // Represents the structure of the Menu JSON
 interface MenuItem {
@@ -12,6 +15,7 @@ interface MenuItem {
     half?: number | null;
     full?: number | null;
     type?: string;
+    image?: string;
 }
 
 interface MenuCategory {
@@ -41,6 +45,9 @@ export default function AdminMenuPage() {
 
     const [editingCategoryIdx, setEditingCategoryIdx] = useState<number | null>(null);
     const [editingItemInfo, setEditingItemInfo] = useState<{ catIdx: number, itemIdx: number } | null>(null);
+    const [uploading, setUploading] = useState(false);
+
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Modal States
     const [categoryModal, setCategoryModal] = useState<MenuCategory | null>(null);
@@ -123,6 +130,24 @@ export default function AdminMenuPage() {
         setItemModal(JSON.parse(JSON.stringify(data.menu[catIdx].items[itemIdx])));
     };
 
+    const handleImageUpload = async (file: File) => {
+        if (!file || !itemModal) return;
+        setUploading(true);
+        console.log("Starting upload for:", file.name, "to bucket:", storage.app.options.storageBucket);
+        try {
+            const storageRef = ref(storage, `menu-items/${Date.now()}-${file.name}`);
+            const uploadResult = await uploadBytes(storageRef, file);
+            console.log("Upload successful:", uploadResult);
+            const url = await getDownloadURL(storageRef);
+            setItemModal({ ...itemModal, image: url });
+        } catch (error: any) {
+            console.error("Firebase Storage Upload Error:", error);
+            alert(`Image upload failed: ${error?.message || "Unknown error"}. Check console for details.`);
+        } finally {
+            setUploading(false);
+        }
+    };
+
     const saveItemModal = () => {
         if (!data || !itemModal || !editingItemInfo) return;
         const newData = { ...data };
@@ -172,7 +197,8 @@ export default function AdminMenuPage() {
                             <p className="text-xs text-gray-500">Live Menu Editor</p>
                         </div>
                     </div>
-                    <div>
+                    <div className="flex items-center gap-4">
+                        <StoreStatusToggle />
                         <button
                             onClick={handleSavePrimary}
                             disabled={saving}
@@ -231,13 +257,20 @@ export default function AdminMenuPage() {
                             <div className="p-0">
                                 {category.items.map((item, itemIdx) => (
                                     <div key={itemIdx} className="px-6 py-3 border-b border-gray-100 flex items-center justify-between hover:bg-gray-50 transition-colors">
-                                        <div>
-                                            <p className="font-medium text-gray-900">{item.name}</p>
-                                            <p className="text-sm text-gray-500 font-bold">
-                                                {item.price ? `₹${item.price}` : ""}
-                                                {item.half ? `Half: ₹${item.half} ` : ""}
-                                                {item.full ? `Full: ₹${item.full}` : ""}
-                                            </p>
+                                        <div className="flex items-center gap-4">
+                                            {item.image && (
+                                                <div className="w-12 h-12 rounded-lg overflow-hidden border border-gray-200 flex-shrink-0">
+                                                    <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                                                </div>
+                                            )}
+                                            <div>
+                                                <p className="font-medium text-gray-900">{item.name}</p>
+                                                <p className="text-sm text-gray-500 font-bold">
+                                                    {item.price ? `₹${item.price}` : ""}
+                                                    {item.half ? `Half: ₹${item.half} ` : ""}
+                                                    {item.full ? `Full: ₹${item.full}` : ""}
+                                                </p>
+                                            </div>
                                         </div>
                                         <div className="flex items-center gap-2">
                                             <button
@@ -315,11 +348,62 @@ export default function AdminMenuPage() {
 
             {itemModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 overflow-hidden flex flex-col max-h-[90vh]">
                         <h2 className="text-xl font-bold mb-4">
                             {editingItemInfo && editingItemInfo.itemIdx >= 0 ? "Edit Item" : "Add Item"}
                         </h2>
-                        <div className="space-y-4">
+                        <div className="space-y-4 overflow-y-auto no-scrollbar pr-1 flex-1">
+                            {/* Image Upload Area */}
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-1">Item Image</label>
+                                <div
+                                    onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                                    onDrop={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        const file = e.dataTransfer.files?.[0];
+                                        if (file) handleImageUpload(file);
+                                    }}
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className={`relative border-2 border-dashed rounded-xl p-4 flex flex-col items-center justify-center gap-2 cursor-pointer transition-all ${itemModal.image ? "border-green-200 bg-green-50" : "border-gray-200 bg-gray-50 hover:border-blue-400 hover:bg-blue-50"}`}
+                                >
+                                    <input
+                                        type="file"
+                                        ref={fileInputRef}
+                                        onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            if (file) handleImageUpload(file);
+                                        }}
+                                        className="hidden"
+                                        accept="image/*"
+                                    />
+
+                                    {uploading ? (
+                                        <div className="flex flex-col items-center gap-2">
+                                            <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent animate-spin rounded-full"></div>
+                                            <p className="text-xs text-blue-600 font-bold">Uploading...</p>
+                                        </div>
+                                    ) : itemModal.image ? (
+                                        <div className="relative group">
+                                            <img src={itemModal.image} className="w-24 h-24 object-cover rounded-lg shadow-sm" alt="Preview" />
+                                            <div className="absolute inset-0 bg-black/40 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <FaCloudUploadAlt className="text-white text-xl" />
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <div className="p-3 bg-white rounded-full shadow-sm">
+                                                <FaImage className="text-gray-400 text-xl" />
+                                            </div>
+                                            <div className="text-center">
+                                                <p className="text-sm font-bold text-gray-700">Drag & drop or click</p>
+                                                <p className="text-[10px] text-gray-400">JPG, PNG or WEBP (Max 5MB)</p>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+
                             <div>
                                 <label className="block text-sm font-bold text-gray-700 mb-1">Item Name</label>
                                 <input
@@ -338,7 +422,7 @@ export default function AdminMenuPage() {
                                     className="w-full border border-gray-300 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
                                 />
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-2 gap-4 pb-2">
                                 <div>
                                     <label className="block text-sm font-bold text-gray-700 mb-1">Half Price (₹)</label>
                                     <input
@@ -361,7 +445,7 @@ export default function AdminMenuPage() {
                                 </div>
                             </div>
                         </div>
-                        <div className="mt-6 flex justify-end gap-3">
+                        <div className="mt-6 flex justify-end gap-3 pt-4 border-t border-gray-100">
                             <button onClick={() => setItemModal(null)} className="px-4 py-2 font-bold text-gray-600 hover:bg-gray-100 rounded-lg cursor-pointer transition-colors">Cancel</button>
                             <button onClick={saveItemModal} className="px-4 py-2 font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg cursor-pointer transition-colors">Done</button>
                         </div>
