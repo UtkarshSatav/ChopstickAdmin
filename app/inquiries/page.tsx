@@ -1,14 +1,20 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { subscribeToAllInquiries, InquiryData } from "@/lib/inquiries";
-import { FaEnvelope, FaUser, FaPhone, FaAt } from "react-icons/fa";
+import { subscribeToAllInquiries, InquiryData, deleteAllInquiries } from "@/lib/inquiries";
+import { FaEnvelope, FaUser, FaPhone, FaAt, FaTrashAlt } from "react-icons/fa";
 import AdminNavbar from "@/components/AdminNavbar";
 import StoreStatusToggle from "@/components/StoreStatusToggle";
 
 export default function InquiriesPage() {
     const [inquiries, setInquiries] = useState<InquiryData[]>([]);
     const [loading, setLoading] = useState(true);
+
+    const handleClearAll = async () => {
+        if (confirm("Are you sure you want to erase ALL inquiries permanently? This cannot be undone.")) {
+            await deleteAllInquiries();
+        }
+    };
 
     useEffect(() => {
         const unsub = subscribeToAllInquiries((data) => {
@@ -32,6 +38,13 @@ export default function InquiriesPage() {
                     </div>
                     <div className="flex items-center gap-4">
                         <StoreStatusToggle />
+                        <button
+                            onClick={handleClearAll}
+                            className="p-2 rounded-full text-red-400 bg-red-50 hover:bg-red-100 hover:text-red-600 transition-colors"
+                            title="Clear All Inquiries"
+                        >
+                            <FaTrashAlt size={16} />
+                        </button>
                         <div className="text-right">
                             <p className="text-sm font-medium text-gray-900">{inquiries.length} total</p>
                         </div>

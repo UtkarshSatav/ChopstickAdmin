@@ -11,6 +11,8 @@ import {
     onSnapshot,
     serverTimestamp,
     Timestamp,
+    deleteDoc,
+    writeBatch,
 } from "firebase/firestore";
 import { db } from "./firebase";
 
@@ -86,4 +88,20 @@ export function subscribeToAllOrders(callback: (orders: Order[]) => void): () =>
         const orders = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as Order));
         callback(orders);
     });
+}
+/**
+ * Delete all orders from the database.
+ */
+export async function deleteAllOrders(): Promise<void> {
+    const orders = await getAllOrders();
+    if (orders.length === 0) return;
+
+    const batch = writeBatch(db);
+    orders.forEach((order) => {
+        if (order.id) {
+            batch.delete(doc(db, ORDERS_COLLECTION, order.id));
+        }
+    });
+
+    await batch.commit();
 }

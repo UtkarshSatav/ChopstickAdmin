@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { subscribeToAllOrders, updateOrderStatus, Order, OrderStatus } from "@/lib/orders";
-import { FaCheckCircle, FaTimesCircle, FaClock, FaUtensils, FaPhone, FaUser, FaMapMarkerAlt, FaBell, FaBellSlash } from "react-icons/fa";
+import { subscribeToAllOrders, updateOrderStatus, deleteAllOrders, Order, OrderStatus } from "@/lib/orders";
+import { FaCheckCircle, FaTimesCircle, FaClock, FaUtensils, FaPhone, FaUser, FaMapMarkerAlt, FaBell, FaBellSlash, FaTrashAlt } from "react-icons/fa";
 import AdminNavbar from "@/components/AdminNavbar";
 import StoreStatusToggle from "@/components/StoreStatusToggle";
 
@@ -290,6 +290,12 @@ export default function AdminOrdersPage() {
         };
     }, [orders, soundEnabled, ensureAudioCtx]);
 
+    const handleClearAll = async () => {
+        if (confirm("Are you sure you want to erase ALL orders permanently? This cannot be undone.")) {
+            await deleteAllOrders();
+        }
+    };
+
     const handleUpdateStatus = async (orderId: string, status: OrderStatus) => {
         await updateOrderStatus(orderId, status);
     };
@@ -336,6 +342,13 @@ export default function AdminOrdersPage() {
                             title={soundEnabled ? "Sound On — click to mute" : "Sound Off — click to unmute"}
                         >
                             {soundEnabled ? <FaBell size={16} /> : <FaBellSlash size={16} />}
+                        </button>
+                        <button
+                            onClick={handleClearAll}
+                            className="p-2 rounded-full text-red-400 bg-red-50 hover:bg-red-100 hover:text-red-600 transition-colors"
+                            title="Fresh Database: Erase all order history"
+                        >
+                            <FaTrashAlt size={16} />
                         </button>
                         <div className="text-right">
                             <p className="text-sm font-medium text-accent">{counts.placed} pending</p>
