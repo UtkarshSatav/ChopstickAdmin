@@ -11,7 +11,6 @@ export default function AdminNavbar() {
     const links = [
         { href: "/orders", label: "Orders", icon: FaUtensils },
         { href: "/menu", label: "Menu", icon: FaStar },
-        { href: "/feedback", label: "Feedback", icon: FaStar },
         { href: "/inquiries", label: "Inquiries", icon: FaEnvelope },
     ];
 

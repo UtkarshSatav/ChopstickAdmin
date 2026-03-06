@@ -12,19 +12,30 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     useEffect(() => {
         setMounted(true);
         if (typeof window !== "undefined") {
-            const auth = localStorage.getItem("chopstick-admin-auth");
-            if (auth === "true") {
-                setIsAuthenticated(true);
+            const sessionStr = localStorage.getItem("chopstick-admin-session");
+            if (sessionStr) {
+                try {
+                    const session = JSON.parse(sessionStr);
+                    const SESSION_DURATION = 22 * 60 * 60 * 1000;
+                    if (Date.now() - session.loginTime < SESSION_DURATION) {
+                        setIsAuthenticated(true);
+                    } else {
+                        localStorage.removeItem("chopstick-admin-session");
+                    }
+                } catch {
+                    localStorage.removeItem("chopstick-admin-session");
+                }
             }
         }
     }, []);
 
     const handleLogin = (e: React.FormEvent) => {
         e.preventDefault();
-        // A simple hardcoded password protection for the dashboard
         if (password === "admin123") {
             setIsAuthenticated(true);
-            localStorage.setItem("chopstick-admin-auth", "true");
+            localStorage.setItem("chopstick-admin-session", JSON.stringify({
+                loginTime: Date.now()
+            }));
             setError("");
         } else {
             setError("Incorrect password");

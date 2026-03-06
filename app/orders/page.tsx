@@ -3,43 +3,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { subscribeToAllOrders, updateOrderStatus, deleteAllOrders, Order, OrderStatus } from "@/lib/orders";
 import { FaCheckCircle, FaTimesCircle, FaClock, FaUtensils, FaPhone, FaUser, FaMapMarkerAlt, FaBell, FaBellSlash, FaTrashAlt } from "react-icons/fa";
+import { motion, AnimatePresence } from "framer-motion";
 import AdminNavbar from "@/components/AdminNavbar";
 import StoreStatusToggle from "@/components/StoreStatusToggle";
 
 type FilterTab = "placed" | "accepted" | "out_for_delivery" | "rejected" | "delivered";
-
-// ─── Loud Bell Sound via Web Audio API ───
-function createBellSound(audioCtx: AudioContext) {
-    // Play a double-strike for urgency
-    playBellStrike(audioCtx, audioCtx.currentTime);
-    playBellStrike(audioCtx, audioCtx.currentTime + 0.25);
-}
-
-function playBellStrike(audioCtx: AudioContext, startTime: number) {
-    const freqs = [830, 1245, 1660, 2490]; // fundamental + harmonics
-    const gains = [1.0, 0.7, 0.5, 0.3];
-    const durations = [1.2, 0.9, 0.7, 0.5];
-
-    freqs.forEach((freq, i) => {
-        const osc = audioCtx.createOscillator();
-        osc.type = i === 0 ? "sine" : "triangle";
-        osc.frequency.setValueAtTime(freq, startTime);
-
-        const gainNode = audioCtx.createGain();
-        gainNode.gain.setValueAtTime(gains[i], startTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + durations[i]);
-
-        // Boost with compressor for max loudness
-        const compressor = audioCtx.createDynamicsCompressor();
-        compressor.threshold.setValueAtTime(-10, startTime);
-        compressor.knee.setValueAtTime(5, startTime);
-        compressor.ratio.setValueAtTime(4, startTime);
-
-        osc.connect(gainNode).connect(compressor).connect(audioCtx.destination);
-        osc.start(startTime);
-        osc.stop(startTime + durations[i]);
-    });
-}
 
 function StatusBadge({ status }: { status: string }) {
     switch (status) {
@@ -96,13 +64,15 @@ function AdminOrderCard({ order, onUpdateStatus, isRinging }: { order: Order; on
     };
 
     return (
-        <div className={`bg-white rounded-2xl shadow-sm border overflow-hidden transition-all duration-300 ${isRinging ? "border-yellow-400 ring-2 ring-yellow-300 shadow-lg shadow-yellow-100" : "border-gray-100"
+        <div className={`bg-white rounded-2xl shadow-sm border overflow-hidden transition-all duration-[2000ms] ${isRinging ? "border-red-500 ring-4 ring-red-400 shadow-2xl shadow-red-200 animate-pulse" : "border-gray-100"
             }`}>
             {/* Ringing banner */}
             {isRinging && (
-                <div className="bg-yellow-50 px-5 py-2 flex items-center gap-2 border-b border-yellow-200">
-                    <FaBell className="text-yellow-600 animate-bounce text-sm" />
-                    <span className="text-yellow-700 text-xs font-bold animate-pulse">🔔 New order incoming!</span>
+                <div className="bg-red-500 px-5 py-3 flex items-center gap-3 border-b border-red-600 text-white">
+                    <div className="bg-white p-1.5 rounded-full animate-bounce">
+                        <FaBell className="text-red-600 text-sm" />
+                    </div>
+                    <span className="text-white text-sm font-black uppercase tracking-widest animate-[pulse_1s_infinite]">Urgent: New Order!</span>
                 </div>
             )}
 
@@ -215,80 +185,21 @@ export default function AdminOrdersPage() {
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<FilterTab>("placed");
-    const [soundEnabled, setSoundEnabled] = useState(true);
-    const [audioCtxState, setAudioCtxState] = useState<string>("suspended");
-
-    const audioCtxRef = useRef<AudioContext | null>(null);
-    const bellIntervalRef = useRef<NodeJS.Timeout | null>(null);
-
-    const ensureAudioCtx = useCallback(() => {
-        if (!audioCtxRef.current) {
-            const AudioCtx = (window.AudioContext || (window as any).webkitAudioContext);
-            audioCtxRef.current = new AudioCtx();
-            setAudioCtxState(audioCtxRef.current.state);
-            audioCtxRef.current.onstatechange = () => {
-                setAudioCtxState(audioCtxRef.current?.state || "suspended");
-            };
-        }
-        if (audioCtxRef.current.state === "suspended") {
-            audioCtxRef.current.resume();
-        }
-        return audioCtxRef.current;
-    }, []);
-
-    // Unlock audio on interaction
-    useEffect(() => {
-        const unlock = () => {
-            if (audioCtxRef.current?.state === "suspended") {
-                audioCtxRef.current.resume();
-            }
-        };
-        window.addEventListener("click", unlock);
-        window.addEventListener("touchstart", unlock);
-        return () => {
-            window.removeEventListener("click", unlock);
-            window.removeEventListener("touchstart", unlock);
-        };
-    }, []);
 
     useEffect(() => {
         const unsub = subscribeToAllOrders((allOrders) => {
             setOrders(allOrders);
             setLoading(false);
+
+            // Section 9 - Scroll admin dashboard to new order immediately
+            if (allOrders.some(o => o.status === "placed")) {
+                setTimeout(() => {
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                }, 100);
+            }
         });
         return () => unsub();
     }, []);
-
-    useEffect(() => {
-        const hasPlaced = orders.some((o) => o.status === "placed");
-
-        if (hasPlaced && soundEnabled) {
-            // Already running? Don't restart, just keep going
-            if (bellIntervalRef.current) return;
-
-            const ctx = ensureAudioCtx();
-            const playSound = () => {
-                if (ctx.state === "running") {
-                    createBellSound(ctx);
-                }
-            };
-
-            playSound();
-            bellIntervalRef.current = setInterval(playSound, 1500);
-        } else {
-            if (bellIntervalRef.current) {
-                clearInterval(bellIntervalRef.current);
-                bellIntervalRef.current = null;
-            }
-        }
-
-        return () => {
-            if (bellIntervalRef.current) {
-                clearInterval(bellIntervalRef.current);
-                bellIntervalRef.current = null;
-            }
-        };
-    }, [orders, soundEnabled, ensureAudioCtx]);
 
     const handleClearAll = async () => {
         if (confirm("Are you sure you want to erase ALL orders permanently? This cannot be undone.")) {
@@ -331,18 +242,6 @@ export default function AdminOrdersPage() {
                         </div>
                     </div>
                     <div className="flex items-center gap-4">
-                        {/* Sound toggle */}
-                        <button
-                            onClick={() => {
-                                ensureAudioCtx();
-                                setSoundEnabled((prev) => !prev);
-                            }}
-                            className={`p-2 rounded-full transition-colors cursor-pointer ${soundEnabled ? "text-yellow-600 bg-yellow-50 hover:bg-yellow-100" : "text-gray-400 bg-gray-100 hover:bg-gray-200"
-                                }`}
-                            title={soundEnabled ? "Sound On — click to mute" : "Sound Off — click to unmute"}
-                        >
-                            {soundEnabled ? <FaBell size={16} /> : <FaBellSlash size={16} />}
-                        </button>
                         <button
                             onClick={handleClearAll}
                             className="p-2 rounded-full text-red-400 bg-red-50 hover:bg-red-100 hover:text-red-600 transition-colors"
@@ -359,21 +258,6 @@ export default function AdminOrdersPage() {
             </header>
 
             <AdminNavbar />
-
-            {/* Sound Blocked Warning */}
-            {soundEnabled && orders.some((o) => o.status === "placed") && audioCtxState !== "running" && (
-                <div className="bg-yellow-100 border-b border-yellow-200 px-4 py-3 flex items-center justify-center gap-3">
-                    <div className="bg-yellow-500 p-2 rounded-full animate-bounce">
-                        <FaBell className="text-white text-sm" />
-                    </div>
-                    <div>
-                        <p className="text-yellow-800 text-sm font-bold">New orders pending!</p>
-                        <p className="text-yellow-700 text-xs">
-                            Please <button onClick={() => ensureAudioCtx().resume()} className="underline font-black hover:text-yellow-900">click here to enable the alarm sound</button>.
-                        </p>
-                    </div>
-                </div>
-            )}
 
             {/* Filter Tabs */}
             <div className="bg-white border-b border-gray-200 sticky top-[76px] z-30">
